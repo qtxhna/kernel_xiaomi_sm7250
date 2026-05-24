@@ -1,0 +1,59 @@
+name: Build Driftwood Kernel
+
+on:
+  push:
+    branches: [ "android-4.19" ] # 当代码推送到 main 或 master 分支时触发
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击运行
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. 拉取内核源码
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+
+    # 2. 安装 Ubuntu 编译必要的依赖包
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
+          make curl zip unzip libxml2-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+    # 3. 下载并配置指定的 Android 官方 AOSP Clang (r450784d / 14.0.6)
+    - name: Setup Specific Android Clang
+      run: |
+        echo "--------------------------------------------------"
+        echo " Downloading Android Clang r450784d (8490178)..."
+        echo "--------------------------------------------------"
+        mkdir -p $GITHUB_WORKSPACE/clang-r450784d
+        
+        # 从 AOSP 官方源下载该特定版本的 tar.gz 归档并解压
+        curl -Lo clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android13-release/clang-r450784d.tar.gz
+        tar -xzf clang.tar.gz -C $GITHUB_WORKSPACE/clang-r450784d
+        
+        # 确保解压出来的二进制工具（clang, ld.lld 等）具备可执行权限
+        chmod +x $GITHUB_WORKSPACE/clang-r450784d/bin/*
+        
+        # 将该 Clang 的 bin 目录加入到 GitHub Actions 的全局 PATH 中
+        echo "$GITHUB_WORKSPACE/clang-r450784d/bin" >> $GITHUB_PATH
+
+    # 4. 执行 build.sh all 进行编译和打包
+    - name: Build Kernel via Script
+      run: |
+        chmod +x build.sh
+        ./build.sh all
+
+    # 5. 将生成的卡刷包复制到工作区（防止因超出工作区路径导致上传失败）
+    - name: Prepare Artifact
+      run: |
+        mkdir -p ./output
+        cp ../out/AnyKernel3-picasso/Driftwood-Kernel-*.zip ./output/
+
+    # 6. 上传编译好的 Zip 卡刷包到 GitHub Actions 产物中
+    - name: Upload Flashable Kernel
+      uses: actions/upload-artifact@v4
+      with:
+        name: Driftwood-Kernel-Flashable
+        path: ./output/Driftwood-Kernel-*.zip
