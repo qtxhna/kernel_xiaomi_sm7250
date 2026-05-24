@@ -10,9 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. 拉取你的 4.19 内核源码
+    # 1. 拉取你的 4.19 内核源码（同时自动递归初始化并更新所有子模块，如 KernelSU）
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
+      with:
+        submodules: 'recursive' # 相当于自动执行 git submodule update --init --recursive
+        fetch-depth: 1          # 浅拉取以加快速度
 
     # 2. 安装 Ubuntu 编译必要的依赖包
     - name: Install Build Dependencies
@@ -28,20 +31,20 @@ jobs:
         echo " Cloning Clang 14.0.6 (r450784d) from Android13..."
         echo "--------------------------------------------------"
         
-        # 独立拉取包含该 Clang 版本的工具链仓库分支到外层目录
         git clone --depth=1 -b android13-release https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $GITHUB_WORKSPACE/android-clang
         
-        # 检查确保目标版本存在
         if [ ! -d "$GITHUB_WORKSPACE/android-clang/clang-r450784d" ]; then
           echo "Error: clang-r450784d not found in this branch!"
           exit 1
         fi
         
-        # 将 Clang 的 bin 目录注入到 GitHub Actions 全局 PATH 中
         echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
 
-    # 4. 执行 build.sh all 进行编译和打包
+    # 4. 执行 build.sh all 进行编译和打包（在此处注入自定义的编译用户名和主机名）
     - name: Build Kernel via Script
+      env:
+        KBUILD_BUILD_USER: qtxhna
+        KBUILD_BUILD_HOST: github-actions
       run: |
         chmod +x build.sh
         ./build.sh all
