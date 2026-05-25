@@ -20,14 +20,14 @@ jobs:
     name: Build (${{ matrix.ksu_status }})
 
     steps:
-    # 1. 拉取内核源码（自动递归 KernelSU 子模块）
+    # 1. 拉取内核源码
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
         fetch-depth: 1
 
-    # 2. 安装 Ubuntu 编译依赖
+    # 2. 安装依赖
     - name: Install Build Dependencies
       run: |
         sudo apt-get update
@@ -35,7 +35,7 @@ jobs:
           make curl zip unzip libxml2-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
           ccache
 
-    # 3. 独立下载包含 clang-r450784d 的 AOSP 工具链（先不注入 PATH）
+    # 3. 下载 AOSP Clang
     - name: Setup Specific Android Clang
       run: |
         echo "--------------------------------------------------"
@@ -52,39 +52,46 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-${{ github.sha }}
+        # 移除 key 尾部的 sha，让它直接匹配最新的一次缓存，进一步提高恢复成功率
+        key: ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-${{ github.run_id }}
         restore-keys: |
           ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-
 
-    # 5. 【核心修复】创建 ccache 编译器伪装，并精确控制 PATH 优先级顺序
+    # 5. 创建 ccache 编译器伪装
     - name: Create ccache Masquerade
       run: |
-        # 创建一个干净的专用目录用来放伪装后的 clang 软链接
         mkdir -p $GITHUB_WORKSPACE/ccache-bin
         ln -s /usr/bin/ccache $GITHUB_WORKSPACE/ccache-bin/clang
-        
-        # 依次注入到 GitHub Actions 的全局 PATH 中（后注入的会排在最前面）
-        # 正确顺序：伪装目录 (ccache-bin) -> 真实编译器目录 (android-clang) -> 系统默认目录
         echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
         echo "$GITHUB_WORKSPACE/ccache-bin" >> $GITHUB_PATH
 
-    # 6. 执行脚本编译（去掉了有冲突的 CC: "ccache clang" 环境变量）
+    # 6. 执行脚本编译（注入终极优化环境变量）
     - name: Build Kernel via Script
       env:
         KBUILD_BUILD_USER: qtxhna
         KBUILD_BUILD_HOST: github-actions
         CCACHE_DIR: "/home/runner/.ccache"
         CCACHE_MAXSIZE: "5G"
+        
+        # 【核心修复 1】将绝对路径重映射为相对路径，防止因路径导致缓存失效
+        CCACHE_BASEDIR: ${{ github.workspace }}
+        
+        # 【核心修复 2】忽略源文件中的文件修改时间（mtime）差异，只关注代码内容本身
+        CCACHE_COMPILERCHECK: "%compiler% -v"
+        
+        # 【核心修复 3】优化内核编译中的预处理行为
+        CCACHE_SLOPPINESS: "file_macro,time_macros,include_file_mtime"
+        
       run: |
         chmod +x build.sh
         
-        # 清除旧的统计，准备记录本次编译
+        # 清除旧统计
         ccache -z
         
         echo "Running build command: ./build.sh ${{ matrix.build_args }}"
         ./build.sh ${{ matrix.build_args }}
         
-        # 打印本次 ccache 命中率状况
+        # 打印本次 ccache 命中率
         ccache -s
 
     # 7. 准备打包产物
