@@ -1,4 +1,4 @@
-name: Build Driftwood Kernel
+name: Build Driftwood Kernel (Matrix)
 
 on:
   push:
@@ -8,14 +8,26 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
+    
+    # 核心：使用矩阵配置策略实现并行编译
+    strategy:
+      matrix:
+        include:
+          - ksu_status: "with-KSU"
+            build_args: "all"
+          - ksu_status: "no-KSU"
+            build_args: "all noksu" # 传入 noksu 参数
+
+    # 给并行的任务命名，方便在 GitHub 界面区分
+    name: Build (${{ matrix.ksu_status }})
 
     steps:
-    # 1. 拉取你的 4.19 内核源码（同时自动递归初始化并更新所有子模块，如 KernelSU）
+    # 1. 拉取你的 4.19 内核源码（自动递归初始化并更新所有子模块，如 KernelSU）
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
-        submodules: 'recursive' # 相当于自动执行 git submodule update --init --recursive
-        fetch-depth: 1          # 浅拉取以加快速度
+        submodules: 'recursive'
+        fetch-depth: 1
 
     # 2. 安装 Ubuntu 编译必要的依赖包
     - name: Install Build Dependencies
@@ -40,24 +52,31 @@ jobs:
         
         echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
 
-    # 4. 执行 build.sh all 进行编译和打包（在此处注入自定义的编译用户名和主机名）
+    # 4. 执行 build.sh 编译（动态传入矩阵参数，并注入自定义编译信息）
     - name: Build Kernel via Script
       env:
         KBUILD_BUILD_USER: qtxhna
         KBUILD_BUILD_HOST: github-actions
       run: |
         chmod +x build.sh
-        ./build.sh all
+        echo "Running build command: ./build.sh ${{ matrix.build_args }}"
+        ./build.sh ${{ matrix.build_args }}
 
-    # 5. 将生成的卡刷包复制到工作区，防止路径越界报错
+    # 5. 将生成的卡刷包复制到工作区，并在文件名中加入 KSU 状态后缀以便区分
     - name: Prepare Artifact
       run: |
         mkdir -p ./output
-        cp ../out/AnyKernel3-picasso/Driftwood-Kernel-*.zip ./output/
+        # 寻找生成的 zip 文件并复制到 output 目录
+        for file in ../out/AnyKernel3-picasso/Driftwood-Kernel-*.zip; do
+          if [ -f "$file" ]; then
+            base=$(basename "$file" .zip)
+            cp "$file" "./output/${base}-${{ matrix.ksu_status }}.zip"
+          fi
+        done
 
-    # 6. 上传编译好的 Zip 卡刷包
+    # 6. 上传当前虚拟机的编译产物
     - name: Upload Flashable Kernel
       uses: actions/upload-artifact@v4
       with:
-        name: Driftwood-Kernel-Flashable
+        name: Driftwood-Kernel-${{ matrix.ksu_status }}
         path: ./output/Driftwood-Kernel-*.zip
