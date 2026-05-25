@@ -1,40 +1,39 @@
-name: Build Driftwood Kernel (Matrix)
+name: Build Driftwood Kernel (Matrix + ccache)
 
 on:
   push:
-    branches: [ "android-4.19" ] # 匹配你的内核源码分支名
-  workflow_dispatch: # 允许手动触发
+    branches: [ "android-4.19" ]
+  workflow_dispatch:
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
     
-    # 核心：使用矩阵配置策略实现并行编译
     strategy:
       matrix:
         include:
           - ksu_status: "with-KSU"
             build_args: "all"
           - ksu_status: "no-KSU"
-            build_args: "all noksu" # 传入 noksu 参数
+            build_args: "all noksu"
 
-    # 给并行的任务命名，方便在 GitHub 界面区分
     name: Build (${{ matrix.ksu_status }})
 
     steps:
-    # 1. 拉取你的 4.19 内核源码（自动递归初始化并更新所有子模块，如 KernelSU）
+    # 1. 拉取内核源码
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
         fetch-depth: 1
 
-    # 2. 安装 Ubuntu 编译必要的依赖包
+    # 2. 安装 Ubuntu 编译依赖（加入 ccache）
     - name: Install Build Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
-          make curl zip unzip libxml2-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          make curl zip unzip libxml2-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+          ccache # 安装 ccache 工具
 
     # 3. 独立下载包含 clang-r450784d 的 AOSP 工具链分支
     - name: Setup Specific Android Clang
@@ -42,31 +41,49 @@ jobs:
         echo "--------------------------------------------------"
         echo " Cloning Clang 14.0.6 (r450784d) from Android13..."
         echo "--------------------------------------------------"
-        
         git clone --depth=1 -b android13-release https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $GITHUB_WORKSPACE/android-clang
-        
         if [ ! -d "$GITHUB_WORKSPACE/android-clang/clang-r450784d" ]; then
           echo "Error: clang-r450784d not found in this branch!"
           exit 1
         fi
-        
         echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
 
-    # 4. 执行 build.sh 编译（动态传入矩阵参数，并注入自定义编译信息）
+    # 4. 配置并恢复 ccache 缓存（GitHub 核心机制）
+    - name: Setup ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache # 指定要缓存的文件夹路径（ccache 默认的缓存目录）
+        # 通过 key 来匹配上一次的缓存。如果 key 变了，会尝试匹配 restore-keys
+        key: ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-
+
+    # 5. 配置 ccache 环境变量并执行编译
     - name: Build Kernel via Script
       env:
         KBUILD_BUILD_USER: qtxhna
         KBUILD_BUILD_HOST: github-actions
+        # 告诉 Linux 内核编译系统使用 ccache 包裹编译器
+        CC: "ccache clang"
+        # 限制 ccache 的最大缓存大小（Actions 单个缓存上限 10GB，这里设为 5GB 足够内核用了）
+        CCACHE_DIR: "/home/runner/.ccache"
+        CCACHE_MAXSIZE: "5G"
       run: |
         chmod +x build.sh
+        
+        # 初始化 ccache 统计信息
+        ccache -z
+        
         echo "Running build command: ./build.sh ${{ matrix.build_args }}"
         ./build.sh ${{ matrix.build_args }}
+        
+        # 打印 ccache 的命中率情况，方便在日志里查看加速效果
+        ccache -s
 
-    # 5. 将生成的卡刷包复制到工作区，并在文件名中加入 KSU 状态后缀以便区分
+    # 6. 准备产物
     - name: Prepare Artifact
       run: |
         mkdir -p ./output
-        # 寻找生成的 zip 文件并复制到 output 目录
         for file in ../out/AnyKernel3-picasso/Driftwood-Kernel-*.zip; do
           if [ -f "$file" ]; then
             base=$(basename "$file" .zip)
@@ -74,7 +91,7 @@ jobs:
           fi
         done
 
-    # 6. 上传当前虚拟机的编译产物
+    # 7. 上传编译好的 Zip 卡刷包
     - name: Upload Flashable Kernel
       uses: actions/upload-artifact@v4
       with:
