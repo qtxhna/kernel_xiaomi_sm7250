@@ -13,7 +13,7 @@
 #
 
 ARCH=arm64;
-CC=${CC:-clang};
+CC=clang;
 LD=ld.lld
 CLANG_TRIPLE=aarch64-linux-gnu-;
 CROSS_COMPILE=aarch64-linux-gnu-;

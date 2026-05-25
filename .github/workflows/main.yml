@@ -20,22 +20,22 @@ jobs:
     name: Build (${{ matrix.ksu_status }})
 
     steps:
-    # 1. 拉取内核源码
+    # 1. 拉取内核源码（自动递归 KernelSU 子模块）
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
         fetch-depth: 1
 
-    # 2. 安装 Ubuntu 编译依赖（加入 ccache）
+    # 2. 安装 Ubuntu 编译依赖
     - name: Install Build Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
           make curl zip unzip libxml2-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-          ccache # 安装 ccache 工具
+          ccache
 
-    # 3. 独立下载包含 clang-r450784d 的 AOSP 工具链分支
+    # 3. 独立下载包含 clang-r450784d 的 AOSP 工具链（先不注入 PATH）
     - name: Setup Specific Android Clang
       run: |
         echo "--------------------------------------------------"
@@ -46,41 +46,48 @@ jobs:
           echo "Error: clang-r450784d not found in this branch!"
           exit 1
         fi
-        echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
 
-    # 4. 配置并恢复 ccache 缓存（GitHub 核心机制）
+    # 4. 配置并恢复 ccache 缓存
     - name: Setup ccache
       uses: actions/cache@v4
       with:
-        path: ~/.ccache # 指定要缓存的文件夹路径（ccache 默认的缓存目录）
-        # 通过 key 来匹配上一次的缓存。如果 key 变了，会尝试匹配 restore-keys
+        path: ~/.ccache
         key: ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-ccache-${{ matrix.ksu_status }}-
 
-    # 5. 配置 ccache 环境变量并执行编译
+    # 5. 【核心修复】创建 ccache 编译器伪装，并精确控制 PATH 优先级顺序
+    - name: Create ccache Masquerade
+      run: |
+        # 创建一个干净的专用目录用来放伪装后的 clang 软链接
+        mkdir -p $GITHUB_WORKSPACE/ccache-bin
+        ln -s /usr/bin/ccache $GITHUB_WORKSPACE/ccache-bin/clang
+        
+        # 依次注入到 GitHub Actions 的全局 PATH 中（后注入的会排在最前面）
+        # 正确顺序：伪装目录 (ccache-bin) -> 真实编译器目录 (android-clang) -> 系统默认目录
+        echo "$GITHUB_WORKSPACE/android-clang/clang-r450784d/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/ccache-bin" >> $GITHUB_PATH
+
+    # 6. 执行脚本编译（去掉了有冲突的 CC: "ccache clang" 环境变量）
     - name: Build Kernel via Script
       env:
         KBUILD_BUILD_USER: qtxhna
         KBUILD_BUILD_HOST: github-actions
-        # 告诉 Linux 内核编译系统使用 ccache 包裹编译器
-        CC: "ccache clang"
-        # 限制 ccache 的最大缓存大小（Actions 单个缓存上限 10GB，这里设为 5GB 足够内核用了）
         CCACHE_DIR: "/home/runner/.ccache"
         CCACHE_MAXSIZE: "5G"
       run: |
         chmod +x build.sh
         
-        # 初始化 ccache 统计信息
+        # 清除旧的统计，准备记录本次编译
         ccache -z
         
         echo "Running build command: ./build.sh ${{ matrix.build_args }}"
         ./build.sh ${{ matrix.build_args }}
         
-        # 打印 ccache 的命中率情况，方便在日志里查看加速效果
+        # 打印本次 ccache 命中率状况
         ccache -s
 
-    # 6. 准备产物
+    # 7. 准备打包产物
     - name: Prepare Artifact
       run: |
         mkdir -p ./output
@@ -91,7 +98,7 @@ jobs:
           fi
         done
 
-    # 7. 上传编译好的 Zip 卡刷包
+    # 8. 上传编译好的 Zip 卡刷包
     - name: Upload Flashable Kernel
       uses: actions/upload-artifact@v4
       with:
