@@ -1107,6 +1107,8 @@ menuconfig NAMESPACES
 	bool "Namespaces support" if EXPERT
 	depends on MULTIUSER
 	default !EXPERT
+	select CONFIG_SYSVIPC
+    select CONFIG_POSIX_MQUEUE
 	select UTS_NS
 	select IPC_NS
 	select USER_NS
