@@ -24,9 +24,20 @@ jobs:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
-        submodules: 'recursive'
+        submodules: false
         fetch-depth: 1
+    - name: Pull the complete history of submodules and convert to directory.
+      run: |
+        git submodule update --init --recursive
+        rm ReSukiSU/.git
+        mv .git/modules/ReSukiSU ReSukiSU/.git
 
+        # 使用 sed 直接修改文本，删除失效的 worktree 配置（绕过 git 本身的路径检查）
+        sed -i '/worktree =/d' ReSukiSU/.git/config
+
+        cd ReSukiSU
+        echo "=== 验证子模块历史记录 ==="
+        git log --oneline -n 5
     # 2. 安装依赖
     - name: Install Build Dependencies
       run: |
