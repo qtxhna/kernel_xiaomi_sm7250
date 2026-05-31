@@ -1107,6 +1107,11 @@ menuconfig NAMESPACES
 	bool "Namespaces support" if EXPERT
 	depends on MULTIUSER
 	default !EXPERT
+	select UTS_NS
+	select IPC_NS
+	select USER_NS
+	select PID_NS
+	select NET_NS
 	help
 	  Provides the way to make tasks work with different objects using
 	  the same id. For example same IPC id may refer to different objects
