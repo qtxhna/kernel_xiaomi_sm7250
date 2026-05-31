@@ -43,6 +43,8 @@ ANYKERNEL_FILE=anykernel.zip;
 
 WITH_KERNELSU=1
 
+TARGET_CONFIG="$OUT/.config"
+
 link_all_dtb_files(){
     find $OUT/arch/arm64/boot/dts/vendor/qcom -name '*.dtb' -exec cat {} + > $OUT/arch/arm64/boot/dtb;
 }
@@ -57,6 +59,26 @@ make_defconfig(){
     fi
 
     make CC=$CC ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_COMPAT=$CROSS_COMPILE_COMPAT CLANG_TRIPLE=$CLANG_TRIPLE LLVM=1 LLVM_IAS=1 $CC_ADDITION_FLAGS O=$OUT -j$THREAD $DEFCONFIG_NAME;
+    if [ $WITH_KERNELSU == 1 ]; then
+        echo "⚙️ 正在强行修改: $TARGET_CONFIG ..."
+
+        # 1. 强行关闭 TRACEPOINT 钩子
+        sed -i 's/^CONFIG_KSU_TRACEPOINT_HOOK=y/# CONFIG_KSU_TRACEPOINT_HOOK is not set/g' "$TARGET_CONFIG"
+
+        # 2. 强行开启 MANUAL 手动钩子（同时处理 "is not set" 和 "=n" 的情况）
+        sed -i 's/^# CONFIG_KSU_MANUAL_HOOK is not set/CONFIG_KSU_MANUAL_HOOK=y/g' "$TARGET_CONFIG"
+        sed -i 's/^CONFIG_KSU_MANUAL_HOOK=n/CONFIG_KSU_MANUAL_HOOK=y/g' "$TARGET_CONFIG"
+
+        # 3. 安全兜底：如果文件中压根没有这一项，直接在末尾追加
+        if ! grep -q "CONFIG_KSU_MANUAL_HOOK=" "$TARGET_CONFIG"; then
+            echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$TARGET_CONFIG"
+        fi
+
+        echo "✅ 强改成功！当前状态："
+        grep -E "CONFIG_KSU_MANUAL_HOOK|CONFIG_KSU_TRACEPOINT_HOOK" "$TARGET_CONFIG"
+    else
+        echo "❌ 错误：未找到目标文件 $TARGET_CONFIG，请确认路径是否正确！"
+    fi
 }
 
 build_kernel(){
