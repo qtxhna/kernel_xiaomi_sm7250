@@ -122,3 +122,93 @@ jobs:
       with:
         name: Driftwood-Kernel-${{ matrix.ksu_status }}
         path: ./output/Driftwood-Kernel-*.zip
+  release:
+    name: 发布与通知
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      # --------- 1. 下载内核编译产物 ---------
+      - name: 获取构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: kernel
+          pattern: kernel-*
+          merge-multiple: true
+
+      # --------- 2. 生成上海时间与时间戳 ---------
+      - name: 获取当前时间
+        id: time
+        run: |
+          NOW=$(date +%s)
+          TIME_STR=$(TZ='Asia/Shanghai' date -d "@$NOW" +'%Y-%m-%d %H:%M')
+          echo "timestamp=$NOW" >> $GITHUB_OUTPUT
+          echo "time=$TIME_STR" >> $GITHUB_OUTPUT
+
+      # --------- 3. 创建 GitHub Release 并上传文件 ---------
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        id: release
+        with:
+          tag_name: rel-${{ steps.time.outputs.timestamp }}
+          name: Kernel Build [${{ steps.time.outputs.time }}]
+          prerelease: ${{ startsWith(github.ref_name, 'dev/') }}
+          files: |
+            kernel/*
+
+      # --------- 4. 组装美化版消息并发送至 Telegram ---------
+      - name: 发送 Telegram 通知
+        continue-on-error: true
+        run: |
+          # 提取并处理提交 ID
+          IDS=(${{ join(github.event.commits.*.id, ' ') }})
+          MAX=5
+          if [ "${#IDS[@]}" -gt "$MAX" ]; then
+            COMMIT_IDS_TEXT="$(printf "• %s\n" "${IDS[@]:0:$MAX}"; echo "• ...更多提交请查看对比差异")"
+          else
+            COMMIT_IDS_TEXT="$(printf "• %s\n" "${IDS[@]}")"
+          fi
+
+          # ==========================================
+          # 💡 在这里修改你的设备信息
+          # 仓库 A 可以写 "小米8 (dipper) / LineageOS 内核"
+          # 仓库 B 可以写 "小米10青春版 (lmi) / SM7250 内核"
+          # ==========================================
+          DEVICE_INFO="红米K30 5G（picasso）"
+
+          # 重新设计的 HTML 消息排版
+          MSG="<b>🚀 内核编译自动发布成功！</b>
+          ──────────────────────
+          📱 <b>核心配置:</b> $DEVICE_INFO
+          📦 <b>源码仓库:</b> <code>${{ github.repository }}</code>
+          ⏰ <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
+
+          🛠️ <b>包含的提交摘要:</b>
+          <pre>$COMMIT_IDS_TEXT</pre>
+          ──────────────────────
+          🔔 <i>提示：点击下方按钮即可前往 GitHub Release 获取最新的卡刷包或镜像文件。</i>"
+
+          # 链接预览与内联按钮配置
+          PREVIEW_OPTIONS="{ \
+            \"url\": \"${{ steps.release.outputs.url }}\", \
+            \"prefer_small_media\": true, \
+            \"show_above_text\": true \
+          }"
+
+          BUTTONS="{\"inline_keyboard\": [ [ \
+            { \"text\": \"📥 下载内核产物\", \"url\": \"${{ steps.release.outputs.url }}\" }, \
+            { \"text\": \"🔍 对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
+          ] ] }"
+
+          # 发送消息
+          curl -LSs -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+                -d "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
+                -d "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
+                -d "parse_mode=HTML" \
+                --data-urlencode "text=$MSG" \
+                -d "link_preview_options=$PREVIEW_OPTIONS" \
+                -d "reply_markup=$BUTTONS" \
+                -o response.txt
