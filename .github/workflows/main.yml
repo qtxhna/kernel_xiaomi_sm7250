@@ -8,7 +8,8 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
-    
+    outputs:
+      resukisu_ver: ${{ steps.calc_ver.outputs.resukisu_ver }}
     strategy:
       matrix:
         include:
@@ -27,6 +28,7 @@ jobs:
         submodules: false
         fetch-depth: 1
     - name: Pull the complete history of submodules and convert to directory.
+      id: calc_ver
       run: |
         git submodule update --init --recursive
         rm ReSukiSU/.git
@@ -38,6 +40,10 @@ jobs:
         cd ReSukiSU
         echo "=== 验证子模块历史记录 ==="
         git log --oneline -n 5
+
+        SUBMODULE_COUNT=$(git rev-list --count HEAD)
+        VERSION_NUM=$((SUBMODULE_COUNT + 30700))
+        echo "resukisu_ver=$VERSION_NUM" >> $GITHUB_OUTPUT
     # 2. 安装依赖
     - name: Install Build Dependencies
       run: |
@@ -179,8 +185,9 @@ jobs:
           # 重新设计的 HTML 消息排版
           MSG="<b>🚀 内核编译自动发布成功！</b>
           ──────────────────────
-          📱 <b>核心配置:</b> $DEVICE_INFO
+          📱 <b>适用设备:</b> $DEVICE_INFO
           📦 <b>源码仓库:</b> <code>${{ github.repository }}</code>
+          🔢 <b>ReSukiSU版本号:</b> <code>v${{ needs.build-kernel.outputs.resukisu_ver }}</code>
           ⏰ <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
 
           🛠️ <b>包含的提交摘要:</b>
