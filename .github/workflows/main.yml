@@ -128,7 +128,8 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs: build
+    # 🟢 核心修复 1：改为匹配上面正确的任务名 build-kernel
+    needs: build-kernel
 
     steps:
       # --------- 1. 下载内核编译产物 ---------
@@ -136,7 +137,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: kernel
-          pattern: kernel-*
+          # 🟢 核心修复 2：匹配上面 Upload 步骤中实际生成的产物名字前缀
+          pattern: Driftwood-Kernel-*
           merge-multiple: true
 
       # --------- 2. 生成上海时间与时间戳 ---------
@@ -172,11 +174,6 @@ jobs:
             COMMIT_IDS_TEXT="$(printf "• %s\n" "${IDS[@]}")"
           fi
 
-          # ==========================================
-          # 💡 在这里修改你的设备信息
-          # 仓库 A 可以写 "小米8 (dipper) / LineageOS 内核"
-          # 仓库 B 可以写 "小米10青春版 (lmi) / SM7250 内核"
-          # ==========================================
           DEVICE_INFO="红米K30 5G（picasso）"
 
           # 重新设计的 HTML 消息排版
