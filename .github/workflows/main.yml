@@ -170,6 +170,8 @@ jobs:
       # --------- 4. 组装美化版消息并发送至 Telegram ---------
       - name: 发送 Telegram 通知
         continue-on-error: true
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           # 提取并处理提交 ID
           IDS=(${{ join(github.event.commits.*.id, ' ') }})
@@ -183,17 +185,16 @@ jobs:
           DEVICE_INFO="红米K30 5G（picasso）"
 
           # 重新设计的 HTML 消息排版
-          MSG="<b>🚀 内核编译自动发布成功！</b>
+          MSG="<b>New Release！</b>
           ──────────────────────
-          📱 <b>适用设备:</b> $DEVICE_INFO
-          📦 <b>源码仓库:</b> <code>${{ github.repository }}</code>
-          🔢 <b>ReSukiSU版本号:</b> <code>v${{ needs.build-kernel.outputs.resukisu_ver }}</code>
-          ⏰ <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
-
-          🛠️ <b>包含的提交摘要:</b>
-          <pre>$COMMIT_IDS_TEXT</pre>
+          <b>适用设备:</b> $DEVICE_INFO
+          <b>源码仓库:</b> <code>${{ github.repository }}</code>
+          <b>ReSukiSU版本号:</b> <code>${{ needs.build-kernel.outputs.resukisu_ver }}</code>
+          <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
+          <b>提交描述:</b> <code>$COMMIT_MSG</code>
+          <b>工作流详情:</b> <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">点击前往查看</a>
           ──────────────────────
-          🔔 <i>提示：点击下方按钮即可前往 GitHub Release 获取最新的卡刷包或镜像文件。</i>"
+          <i>点击下方按钮即可前往 GitHub Release 获取 Anykernel3 文件</i>"
 
           # 链接预览与内联按钮配置
           PREVIEW_OPTIONS="{ \
@@ -203,8 +204,8 @@ jobs:
           }"
 
           BUTTONS="{\"inline_keyboard\": [ [ \
-            { \"text\": \"📥 下载内核产物\", \"url\": \"${{ steps.release.outputs.url }}\" }, \
-            { \"text\": \"🔍 对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
+            { \"text\": \"下载内核产物\", \"url\": \"${{ steps.release.outputs.url }}\" }, \
+            { \"text\": \"对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
           ] ] }"
 
           # 发送消息
