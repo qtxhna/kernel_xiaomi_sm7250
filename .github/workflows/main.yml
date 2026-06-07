@@ -193,7 +193,7 @@ jobs:
           <b>ReSukiSU版本号:</b> <code>${{ needs.build-kernel.outputs.resukisu_ver }}</code>
           <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
           <b>提交描述:</b> <code>$SAFE_MSG</code> 
-          <b>工作流详情:</b> <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">点击前往查看</a>
+          <b>工作流详情:</b> <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>点击前往查看</a>
           ──────────────────────
           <i>点击下方按钮即可前往 GitHub Release 获取 Anykernel3 文件</i>"
 
