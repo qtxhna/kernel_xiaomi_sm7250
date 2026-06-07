@@ -189,6 +189,7 @@ jobs:
           MSG="<b>New Release！</b>
           ──────────────────────
           <b>适用设备:</b> $DEVICE_INFO
+          <b>适用系统:</b> <code>类原生 ROM</code>
           <b>源码仓库:</b> <code>${{ github.repository }}</code>
           <b>ReSukiSU版本号:</b> <code>${{ needs.build-kernel.outputs.resukisu_ver }}</code>
           <b>编译时间:</b> <code>${{ steps.time.outputs.time }}</code>
