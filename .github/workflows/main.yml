@@ -167,14 +167,13 @@ jobs:
           files: |
             kernel/*
 
-      # --------- 4. 组装美化版消息并发送至 Telegram ---------
       - name: 发送 Telegram 通知
-        # 移除 continue-on-error 方便在测试时暴露问题，稳定后再考虑开启
+        continue-on-error: true
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          # 1. 安全处理安全提交描述（转义 HTML 特殊字符）
-          SAFE_COMMIT_MSG=$(echo "$COMMIT_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          # 1. 使用 Python 进行绝对安全的 HTML 转义（自动处理 &、<、> 且自带分号）
+          SAFE_COMMIT_MSG=$(python3 -c "import os; text=os.environ.get('COMMIT_MSG', ''); print(text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))")
 
           # 提取并处理提交 ID
           IDS=(${{ join(github.event.commits.*.id, ' ') }})
@@ -199,17 +198,17 @@ jobs:
           ──────────────────────
           <i>点击下方按钮即可前往 GitHub Release 获取 Anykernel3 文件</i>"
 
-          # 保障 URL 为空时的兜底（避免 Telegram 报错）
+          # 保障 URL 为空时的兜底
           RELEASE_URL="${{ steps.release.outputs.url }}"
           COMPARE_URL="${{ github.event.compare }}"
           [ -z "$RELEASE_URL" ] && RELEASE_URL="${{ github.server_url }}/${{ github.repository }}"
           [ -z "$COMPARE_URL" ] && COMPARE_URL="${{ github.server_url }}/${{ github.repository }}"
 
-          # 链接预览与内联按钮配置 (压缩为单行 JSON 降低出错率)
+          # 链接预览与内联按钮配置
           PREVIEW_OPTIONS="{\"url\":\"${RELEASE_URL}\",\"prefer_small_media\":true,\"show_above_text\":true}"
           BUTTONS="{\"inline_keyboard\":[[{\"text\":\"下载内核产物\",\"url\":\"${RELEASE_URL}\"},{\"text\":\"对比代码差异\",\"url\":\"${COMPARE_URL}\"}]]}"
 
-          # 发送消息（全部关键数据使用 --data-urlencode）
+          # 发送消息
           curl -LSs -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
                 -d "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
                 -d "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
