@@ -226,7 +226,6 @@ jobs:
                 -F "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
                 -F "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
                 -F "parse_mode=HTML" \
-                # ⬇️ 修改下面这行，去掉 ./ 换成 $GITHUB_WORKSPACE
                 -F "document=@$GITHUB_WORKSPACE/Anykernel3-picasso.zip" \
                 -F "caption=$MSG" \
                 -F "link_preview_options=$PREVIEW_OPTIONS" \
