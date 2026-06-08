@@ -175,7 +175,8 @@ jobs:
           # 1. 自动寻找 with-KSU 的编译包，并重命名为指定名称
           KSU_SRC_FILE=$(find kernel -name "*with-KSU.zip" | head -n 1)
           if [ -f "$KSU_SRC_FILE" ]; then
-            cp "$KSU_SRC_FILE" ./Anykernel3-picasso.zip
+            # ⬇️ 修改为 $GITHUB_WORKSPACE 绝对路径
+            cp "$KSU_SRC_FILE" "$GITHUB_WORKSPACE/Anykernel3-picasso.zip"
             echo "成功找到 KSU 内核并重命名: Anykernel3-picasso.zip"
           else
             echo "未找到 with-KSU 内核文件，请检查上游构建产物！"
@@ -220,13 +221,13 @@ jobs:
             { \"text\": \"🔍 对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
           ] ] }"
 
-          # 5. 使用 sendDocument 接口混合上传文件与文字摘要
-          # 注意：上传文件时，所有参数必须全部切换为 -F (FormData) 格式
+          # 发送消息
           curl -LSs -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument \
                 -F "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
                 -F "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
                 -F "parse_mode=HTML" \
-                -F "document=@./Anykernel3-picasso.zip" \
+                # ⬇️ 修改下面这行，去掉 ./ 换成 $GITHUB_WORKSPACE
+                -F "document=@$GITHUB_WORKSPACE/Anykernel3-picasso.zip" \
                 -F "caption=$MSG" \
                 -F "link_preview_options=$PREVIEW_OPTIONS" \
                 -F "reply_markup=$BUTTONS"
