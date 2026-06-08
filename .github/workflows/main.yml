@@ -166,14 +166,23 @@ jobs:
           prerelease: ${{ startsWith(github.ref_name, 'dev/') }}
           files: |
             kernel/*
-
-      # --------- 4. 组装美化版消息并发送至 Telegram ---------
+      # --------- 4. 组装美化版消息并附带 KSU 文件发送至 Telegram ---------
       - name: 发送 Telegram 通知
         continue-on-error: true
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          # 提取并处理提交 ID
+          # 1. 自动寻找 with-KSU 的编译包，并重命名为指定名称
+          KSU_SRC_FILE=$(find kernel -name "*with-KSU.zip" | head -n 1)
+          if [ -f "$KSU_SRC_FILE" ]; then
+            cp "$KSU_SRC_FILE" ./Anykernel3-picasso.zip
+            echo "成功找到 KSU 内核并重命名: Anykernel3-picasso.zip"
+          else
+            echo "未找到 with-KSU 内核文件，请检查上游构建产物！"
+            exit 1
+          fi
+
+          # 2. 提取并处理提交 ID
           IDS=(${{ join(github.event.commits.*.id, ' ') }})
           MAX=5
           if [ "${#IDS[@]}" -gt "$MAX" ]; then
@@ -183,9 +192,10 @@ jobs:
           fi
 
           DEVICE_INFO="红米K30 5G（picasso）"
+          # 安全过滤 Commit 里的特殊字符，防止 Bash 和 TG 崩溃
           SAFE_MSG=$(echo "$COMMIT_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\\"/g')
 
-          # 重新设计的 HTML 消息排版
+          # 3. 重新设计的 HTML 消息排版（作为文件的 Caption 说明文字）
           MSG="<b>New Release！</b>
           ──────────────────────
           <b>适用设备:</b> $DEVICE_INFO
@@ -196,9 +206,9 @@ jobs:
           <b>提交描述:</b> <code>$SAFE_MSG</code> 
           <b>工作流详情:</b> <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>点击前往查看</a>
           ──────────────────────
-          <i>点击下方按钮即可前往 GitHub Release 获取 Anykernel3 文件</i>"
+          <i>下方已附带 Anykernel3 刷机包，可直接下载使用</i>"
 
-          # 链接预览与内联按钮配置
+          # 4. 链接预览与内联按钮配置
           PREVIEW_OPTIONS="{ \
             \"url\": \"${{ steps.release.outputs.url }}\", \
             \"prefer_small_media\": true, \
@@ -206,15 +216,17 @@ jobs:
           }"
 
           BUTTONS="{\"inline_keyboard\": [ [ \
-            { \"text\": \"下载内核产物\", \"url\": \"${{ steps.release.outputs.url }}\" }, \
-            { \"text\": \"对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
+            { \"text\": \"📥 前往 Release 页面\", \"url\": \"${{ steps.release.outputs.url }}\" }, \
+            { \"text\": \"🔍 对比代码差异\", \"url\": \"${{ github.event.compare }}\" } \
           ] ] }"
 
-          # 发送消息
-          curl -LSs -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
-                -d "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
-                -d "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
-                -d "parse_mode=HTML" \
-                --data-urlencode "text=$MSG" \
-                -d "link_preview_options=$PREVIEW_OPTIONS" \
-                -d "reply_markup=$BUTTONS"
+          # 5. 使用 sendDocument 接口混合上传文件与文字摘要
+          # 注意：上传文件时，所有参数必须全部切换为 -F (FormData) 格式
+          curl -LSs -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument \
+                -F "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
+                -F "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
+                -F "parse_mode=HTML" \
+                -F "document=@./Anykernel3-picasso.zip" \
+                -F "caption=$MSG" \
+                -F "link_preview_options=$PREVIEW_OPTIONS" \
+                -F "reply_markup=$BUTTONS"
