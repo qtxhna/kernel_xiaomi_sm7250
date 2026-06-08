@@ -222,11 +222,13 @@ jobs:
           ] ] }"
 
           # 发送消息
+          # 发送消息（最小修改：将文本参数的 -F 替换为 --form-string，防止 < 符号引发 curl 误判）
           curl -LSs -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument \
-                -F "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
-                -F "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
-                -F "parse_mode=HTML" \
                 -F "document=@$GITHUB_WORKSPACE/Anykernel3-picasso.zip" \
-                -F "caption=$MSG" \
-                -F "link_preview_options=$PREVIEW_OPTIONS" \
-                -F "reply_markup=$BUTTONS"
+                --form-string "chat_id=${{ vars.TELEGRAM_CHAT_ID }}" \
+                --form-string "message_thread_id=${{ vars.TELEGRAM_MESSAGE_THREAD_ID }}" \
+                --form-string "parse_mode=HTML" \
+                --form-string "caption=$MSG" \
+                --form-string "link_preview_options=$PREVIEW_OPTIONS" \
+                --form-string "reply_markup=$BUTTONS"
+
