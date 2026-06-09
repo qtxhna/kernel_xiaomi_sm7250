@@ -207,7 +207,7 @@ jobs:
           <b>提交描述:</b> <code>$SAFE_MSG</code> 
           <b>工作流详情:</b> <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>点击前往查看</a>
           ──────────────────────
-          <i>下方已附带 Anykernel3 刷机包，可直接下载使用</i>"
+          <i>上方已附带 Anykernel3 刷机包，可直接下载使用</i>"
 
           # 4. 链接预览与内联按钮配置
           PREVIEW_OPTIONS="{ \
